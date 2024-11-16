@@ -1,0 +1,142 @@
+/*
+This script implements a Q-learning agent to play Tic-Tac-Toe using Reinforcement Learning (RL).
+
+Key Components:
+1. **TicTacToeEnv Class**: Represents the game environment with methods for resetting the game, checking win conditions, and processing moves.
+2. **QLearningAgent Class**: Defines the agent that learns by interacting with the environment. It uses a Q-table to store state-action values and updates them using the Q-learning algorithm.
+3. **Training**: The `train_agent` function runs multiple episodes where the agent learns from the environment by adjusting its Q-values based on rewards.
+4. **Evaluation**: The `evaluate_agent` function tests the trained agent over several episodes to track wins, losses, and draws.
+
+Concepts:
+- **Reinforcement Learning**: The agent learns through trial and error.
+- **Q-learning**: A model-free RL algorithm that updates action values to learn optimal policies.
+
+*/
+
+import numpy as np
+import random
+
+# Define the Tic-Tac-Toe Environment
+class TicTacToeEnv:
+    def __init__(self):
+        self.board = np.zeros((3, 3))  # A 3x3 board initialized to 0 (empty)
+        self.done = False  # Flag to track if the game is over
+        self.winner = None  # Store the winner ('X' or 'O')
+        
+    def reset(self):
+        self.board = np.zeros((3, 3))  # Reset the board
+        self.done = False
+        self.winner = None
+        return self.board.flatten()
+        
+    def is_winner(self, player):
+        for i in range(3):
+            # Check rows, columns, and diagonals
+            if np.all(self.board[i, :] == player) or np.all(self.board[:, i] == player):
+                return True
+        if np.all(np.diagonal(self.board) == player) or np.all(np.diagonal(np.fliplr(self.board)) == player):
+            return True
+        return False
+        
+    def is_full(self):
+        return not np.any(self.board == 0)  # Check if the board is full (no zeros)
+    
+    def step(self, action, player):
+        row, col = divmod(action, 3)
+        if self.board[row, col] != 0:
+            return self.board.flatten(), -10, True, {}  # Invalid move, penalize
+        
+        self.board[row, col] = player  # Place the player's mark on the board
+        
+        if self.is_winner(player):
+            self.done = True
+            return self.board.flatten(), 10, True, {}  # Player wins
+        
+        if self.is_full():
+            self.done = True
+            return self.board.flatten(), 0, True, {}  # Draw
+        
+        return self.board.flatten(), 0, False, {}  # Continue game
+
+    def render(self):
+        print(self.board)
+
+
+# Define the Q-learning Agent
+class QLearningAgent:
+    def __init__(self, actions, alpha=0.5, gamma=0.9, epsilon=0.1):
+        self.alpha = alpha  # Learning rate
+        self.gamma = gamma  # Discount factor
+        self.epsilon = epsilon  # Exploration rate
+        self.actions = actions  # Possible actions (9 for Tic-Tac-Toe)
+        self.q_table = {}  # Q-table for storing state-action values
+
+    def get_q_value(self, state, action):
+        if state not in self.q_table:
+            self.q_table[state] = np.zeros(len(self.actions))
+        return self.q_table[state][action]
+
+    def update_q_value(self, state, action, reward, next_state):
+        best_next_action = np.argmax(self.q_table.get(next_state, np.zeros(len(self.actions))))
+        td_target = reward + self.gamma * self.get_q_value(next_state, best_next_action)
+        td_error = td_target - self.get_q_value(state, action)
+        self.q_table[state][action] += self.alpha * td_error
+
+    def choose_action(self, state):
+        if random.uniform(0, 1) < self.epsilon:  # Exploration
+            return random.choice(self.actions)
+        else:  # Exploitation
+            return np.argmax(self.q_table.get(state, np.zeros(len(self.actions))))
+
+
+# Training the Q-learning agent
+def train_agent(episodes=10000):
+    env = TicTacToeEnv()
+    actions = list(range(9))  # Actions are the positions on the board (0-8)
+    agent = QLearningAgent(actions)
+    
+    for episode in range(episodes):
+        state = env.reset()  # Reset environment to the initial state
+        done = False
+        while not done:
+            action = agent.choose_action(state)
+            next_state, reward, done, _ = env.step(action, 1)  # 1 for agent's move
+            
+            # Update Q-value for the agent
+            agent.update_q_value(tuple(state), action, reward, tuple(next_state))
+            
+            state = next_state
+            
+        # Optionally decay epsilon over time for less exploration
+        if agent.epsilon > 0.1:
+            agent.epsilon *= 0.995
+    
+    return agent
+
+# Evaluating the trained agent
+def evaluate_agent(agent, episodes=100):
+    env = TicTacToeEnv()
+    wins, draws, losses = 0, 0, 0
+    
+    for episode in range(episodes):
+        state = env.reset()
+        done = False
+        while not done:
+            action = agent.choose_action(state)
+            next_state, reward, done, _ = env.step(action, 1)  # 1 for agent's move
+            
+            if done:
+                if reward == 10:
+                    wins += 1
+                elif reward == 0:
+                    draws += 1
+                else:
+                    losses += 1
+                break
+            state = next_state
+    return wins, draws, losses
+
+
+# Main script to train and evaluate the agent
+trained_agent = train_agent(episodes=10000)
+wins, draws, losses = evaluate_agent(trained_agent, episodes=100)
